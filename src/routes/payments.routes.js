@@ -3,6 +3,7 @@ const crypto = require("crypto");
 const router = express.Router();
 
 const razorpay = require("../services/razorpay.service");
+const supabase = require("../services/supabase.service");
 
 router.post("/create-order", async (req, res) => {
   try {
@@ -25,6 +26,25 @@ router.post("/create-order", async (req, res) => {
     const order = await razorpay.orders.create(options);
     console.log("Order Created Successfully",order.id);
 
+    const { data, error } = await supabase
+  .from("payments")
+  .insert([
+    {
+      razorpay_order_id: order.id,
+      amount: order.amount,
+      currency: order.currency,
+      receipt: order.receipt,
+      status: "PENDING",
+    },
+  ])
+  .select();
+
+if (error) {
+  console.error("Supabase Insert Error:", error);
+} else {
+  console.log("Inserted Successfully");
+  console.log(data);
+}
     return res.status(201).json({
       success: true,
       order,
