@@ -79,11 +79,22 @@ router.post("/verify-payment", async (req, res) => {
       expectedSignature === razorpay_signature;
 
     if (isAuthentic) {
+      const [data,error] = await supabase
+      .from("payments")
+      .update({
+        razorpay_payment_id,
+        status: "SUCCESS",
+      })
+    .eq("razorpay_order_id", razorpay_order_id);
+
+      console.log(data,error)
+
       return res.status(200).json({
         success: true,
         message: "Payment verified successfully",
       });
-    } else {
+    } 
+    else {
       return res.status(400).json({
         success: false,
         message: "Invalid signature",
