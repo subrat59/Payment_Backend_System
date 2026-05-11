@@ -375,8 +375,8 @@ router.get(
             async (txn) => {
 
               const isDebit =
-                txn.sender_wallet_id ===
-                currentWallet.id;
+                txn.receiver_wallet_id !=
+                currentWallet.id;   
 
               const otherUserId =
                 isDebit
