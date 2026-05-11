@@ -316,4 +316,115 @@ router.post("/transfer", auth , async (req, res) => {
     });
   }
 });
+
+router.get(
+  "/history",
+  auth,
+  async (req, res) => {
+
+    try {
+
+      const userId =
+        req.user.userId;
+
+      // Current wallet
+      const {
+        data: currentWallet,
+      } = await supabase
+        .from("wallets")
+        .select()
+        .eq("user_id", userId)
+        .single();
+
+      // Transactions
+      const {
+        data: transactions,
+        error,
+      } = await supabase
+        .from("transactions")
+        .select(`
+          *,
+          sender_wallet:sender_wallet_id (
+            id,
+            user_id
+          ),
+          receiver_wallet:receiver_wallet_id (
+            id,
+            user_id
+          )
+        `)
+        .or(
+          `sender_wallet_id.eq.${currentWallet.id},receiver_wallet_id.eq.${currentWallet.id}`
+        )
+        .order("created_at", {
+          ascending: false,
+        });
+
+      if (error) {
+        return res.status(500).json({
+          success: false,
+          error,
+        });
+      }
+
+      // Enrich transactions
+      const enrichedTransactions =
+        await Promise.all(
+
+          transactions.map(
+            async (txn) => {
+
+              const isDebit =
+                txn.sender_wallet_id ===
+                currentWallet.id;
+
+              const otherUserId =
+                isDebit
+                  ? txn.receiver_wallet.user_id
+                  : txn.sender_wallet.user_id;
+
+              // Fetch other user
+              const {
+                data: otherUser,
+              } = await supabase
+                .from("users")
+                .select()
+                .eq("id", otherUserId)
+                .single();
+
+              return {
+                ...txn,
+
+                transactionType:
+                  isDebit
+                    ? "DEBIT"
+                    : "CREDIT",
+
+                otherUser:
+                  otherUser?.full_name,
+              };
+            }
+          )
+        );
+
+      return res.status(200).json({
+        success: true,
+
+        transactions:
+          enrichedTransactions,
+      });
+
+    } catch (error) {
+
+      console.log(error);
+
+      return res.status(500).json({
+        success: false,
+        message:
+          "Internal server error",
+      });
+    }
+  }
+);
+
 module.exports = router;

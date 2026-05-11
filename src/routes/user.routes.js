@@ -1,8 +1,8 @@
 const express = require("express");
 const router = express.Router();
 const jwt = require("jsonwebtoken");
-
 const supabase = require("../services/supabase.service");
+const auth = require('../middleware/auth')
 
 router.post("/create", async (req, res) => {
 
@@ -117,6 +117,46 @@ router.post("/check-user", async (req, res) => {
 
   }
 
+});
+
+router.get("/me", auth, async (req, res) => {
+
+  try {
+
+    const userId =
+      req.user.userId;
+
+    const {
+      data,
+      error,
+    } = await supabase
+      .from("users")
+      .select()
+      .eq("id", userId)
+      .single();
+
+    if (error) {
+      return res.status(500).json({
+        success: false,
+        error,
+      });
+    }
+
+    return res.status(200).json({
+      success: true,
+      user: data,
+    });
+
+  } catch (error) {
+
+    console.log(error);
+
+    return res.status(500).json({
+      success: false,
+      message:
+        "Internal server error",
+    });
+  }
 });
 
 module.exports = router;
