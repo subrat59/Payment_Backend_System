@@ -1,5 +1,6 @@
 const express = require("express");
 const router = express.Router();
+const jwt = require("jsonwebtoken");
 
 const supabase = require("../services/supabase.service");
 
@@ -89,9 +90,18 @@ router.post("/check-user", async (req, res) => {
     }
 
     // User exists
+    console.log(data)
+    const token = jwt.sign(
+      {
+       userId: data.id,
+      },
+    process.env.JWT_SECRET
+   );
+
     return res.status(200).json({
       success: true,
       exists: true,
+      token,
       message: "User exists",
       user: data,
     });
