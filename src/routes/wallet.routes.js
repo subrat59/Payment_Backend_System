@@ -107,6 +107,14 @@ router.post("/transfer", auth , async (req, res) => {
 
     const senderId=req.user.userId;
 
+    const {
+  data: senderUser,
+} = await supabase
+  .from("users")
+  .select("*")
+  .eq("id", senderId)
+  .single();
+
     // Validation
     if (
       !senderId ||
@@ -299,6 +307,37 @@ router.post("/transfer", auth , async (req, res) => {
           amount,
         },
       ]);
+
+      const {
+  createNotification,
+} = require(
+  "../services/notification.service"
+);
+
+await createNotification({
+
+  userId: senderId,
+
+  title: "Money Sent",
+
+  message:
+    `₹${amount} sent to ${receiverUser.full_name}`,
+
+  type: "DEBIT",
+});
+
+
+await createNotification({
+
+  userId: receiverUser.id,
+
+  title: "Money Received",
+
+  message:
+    `₹${amount} received from ${senderUser.full_name}`,
+
+  type: "CREDIT",
+});
 
     return res.status(200).json({
       success: true,

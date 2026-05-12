@@ -28,6 +28,7 @@ module.exports = function (req, res, next) {
       token,
       process.env.JWT_SECRET
     );
+    console.log(decoded)
 
     // Save user info in request
     req.user = decoded;
