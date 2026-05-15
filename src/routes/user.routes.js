@@ -225,4 +225,27 @@ router.get("/me", auth, async (req, res) => {
   }
 });
 
+router.get("/:id", auth, async (req, res) => {
+
+  const userId = req.params.id;
+
+  const { data, error } = await supabase
+    .from("users")
+    .select("*")
+    .eq("id", userId)
+    .single();
+
+  if (error) {
+    return res.status(404).json({
+      success: false,
+      message: "User not found",
+    });
+  }
+
+  return res.status(200).json({
+    success: true,
+    user: data,
+  });
+});
+
 module.exports = router;
