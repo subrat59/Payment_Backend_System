@@ -5,6 +5,12 @@ const supabase = require("../services/supabase.service");
 
 const auth = require("../middleware/auth");
 
+const {
+  createNotification,
+} = require(
+  "../services/notification.service"
+);
+
 router.post("/create", async (req, res) => {
 
   try {
