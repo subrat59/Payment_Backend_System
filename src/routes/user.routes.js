@@ -4,59 +4,125 @@ const jwt = require("jsonwebtoken");
 const supabase = require("../services/supabase.service");
 const auth = require('../middleware/auth')
 
-router.post("/create", async (req, res) => {
 
-  try {
+router.post(
+  "/create",
+  async (req, res) => {
 
-    const { email, phone } = req.body;
-    const full_name = req.body.fullName;
+    try {
 
-    console.log("Ine user route",full_name,
-          email,
-          phone)
-    if (!full_name || !phone) {
-      return res.status(400).json({
-        success: false,
-        message: "Name and phone required",
-      });
-    }
+      const {
+        email,
+        phone,
+      } = req.body;
 
-    // Create user
-    const { data, error } = await supabase
-      .from("users")
-      .insert([
+      const full_name =
+        req.body.fullName;
+
+      console.log(
+        "User Route:",
+        full_name,
+        email,
+        phone
+      );
+
+      // Validation
+      if (
+        !full_name ||
+        !phone
+      ) {
+
+        return res.status(400).json({
+          success: false,
+          message:
+            "Name and phone required",
+        });
+      }
+
+      // Create user
+      const {
+        data: user,
+        error: userError,
+      } = await supabase
+        .from("users")
+        .insert([
+          {
+            full_name,
+            email,
+            phone,
+          },
+        ])
+        .select()
+        .single();
+
+      if (userError) {
+
+        return res.status(500).json({
+          success: false,
+          error: userError,
+        });
+      }
+
+      // Create wallet
+      const {
+        data: wallet,
+        error: walletError,
+      } = await supabase
+        .from("wallets")
+        .insert([
+          {
+            user_id: user.id,
+
+            balance: 0,
+          },
+        ])
+        .select()
+        .single();
+
+      if (walletError) {
+
+        return res.status(500).json({
+          success: false,
+          error: walletError,
+        });
+      }
+
+      // Generate JWT
+      const token = jwt.sign(
         {
-          full_name,
-          email,
-          phone,
+          userId: user.id,
         },
-      ])
-      .select();
 
-    if (error) {
+        process.env.JWT_SECRET,
+
+        {
+          expiresIn: "7d",
+        }
+      );
+
+      return res.status(201).json({
+
+        success: true,
+
+        user,
+
+        wallet,
+
+        token,
+      });
+
+    } catch (error) {
+
+      console.error(error);
+
       return res.status(500).json({
         success: false,
-        error,
+        message:
+          "Internal server error",
       });
     }
-
-    return res.status(201).json({
-      success: true,
-      user: data[0],
-    });
-
-  } catch (error) {
-
-    console.error(error);
-
-    return res.status(500).json({
-      success: false,
-      message: "Internal server error",
-    });
-
   }
-
-});
+);
 
 router.post("/check-user", async (req, res) => {
 
