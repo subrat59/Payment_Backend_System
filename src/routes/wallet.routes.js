@@ -101,6 +101,7 @@ router.post("/transfer", auth , async (req, res) => {
   try {
 
     const {
+      receiverId,
       receiverPhone,
       amount,
     } = req.body;
@@ -148,7 +149,9 @@ router.post("/transfer", auth , async (req, res) => {
     }
 
     // Find receiver user using phone
-    const {
+    if(receiverPhone)
+    {
+      const {
       data: receiverUser,
       error: receiverUserError,
     } = await supabase
@@ -166,6 +169,26 @@ router.post("/transfer", auth , async (req, res) => {
         message: "Receiver not found",
       });
     }
+  } else {
+    const {
+      data: receiverUser,
+      error: receiverUserError,
+    } = await supabase
+      .from("users")
+      .select()
+      .eq("id", receiverId)
+      .single();
+
+    if (
+      receiverUserError ||
+      !receiverUser
+    ) {
+      return res.status(404).json({
+        success: false,
+        message: "Receiver not found",
+      });
+    }
+  }
 
     // Prevent self transfer
     if (receiverUser.id === senderId) {
