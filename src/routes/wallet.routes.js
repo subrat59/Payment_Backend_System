@@ -96,288 +96,418 @@ router.get('/fetchbalance' , auth , async (req,res) => {
   }
     
 });
+/*
+========================================
+TRANSFER MONEY
+========================================
+*/
 
-router.post("/transfer", auth , async (req, res) => {
-  try {
+router.post(
+  "/transfer",
+  auth,
+  async (req, res) => {
 
-    const {
-      receiverId,
-      receiverPhone,
-      amount,
-    } = req.body;
+    try {
 
-    const senderId=req.user.userId;
-
-    const {
-  data: senderUser,
-} = await supabase
-  .from("users")
-  .select("*")
-  .eq("id", senderId)
-  .single();
-
-    // Validation
-    if (
-      !senderId ||
-      !receiverPhone ||
-      !amount
-    ) {
-      return res.status(400).json({
-        success: false,
-        message: "Missing fields",
-      });
-    }
-
-    // Find sender wallet
-    const {
-      data: senderWallet,
-      error: senderWalletError,
-    } = await supabase
-      .from("wallets")
-      .select()
-      .eq("user_id", senderId)
-      .single();
-
-    if (
-      senderWalletError ||
-      !senderWallet
-    ) {
-      return res.status(404).json({
-        success: false,
-        message: "Sender wallet not found",
-      });
-    }
-
-    // Find receiver user using phone
-    if(receiverPhone)
-    {
       const {
-      data: receiverUser,
-      error: receiverUserError,
-    } = await supabase
-      .from("users")
-      .select()
-      .eq("phone", receiverPhone)
-      .single();
+        receiverId,
+        receiverPhone,
+        amount,
+      } = req.body;
 
-    if (
-      receiverUserError ||
-      !receiverUser
-    ) {
-      return res.status(404).json({
-        success: false,
-        message: "Receiver not found",
+      const senderId =
+        req.user.userId;
+
+      /*
+      ========================================
+      VALIDATION
+      ========================================
+      */
+
+      if (
+        (!receiverId &&
+          !receiverPhone) ||
+        !amount
+      ) {
+
+        return res.status(400).json({
+          success: false,
+          message:
+            "Receiver and amount required",
+        });
+      }
+
+      /*
+      ========================================
+      FETCH SENDER USER
+      ========================================
+      */
+
+      const {
+        data: senderUser,
+        error: senderUserError,
+      } = await supabase
+        .from("users")
+        .select("*")
+        .eq("id", senderId)
+        .single();
+
+      if (
+        senderUserError ||
+        !senderUser
+      ) {
+
+        return res.status(404).json({
+          success: false,
+          message:
+            "Sender not found",
+        });
+      }
+
+      /*
+      ========================================
+      FETCH SENDER WALLET
+      ========================================
+      */
+
+      const {
+        data: senderWallet,
+        error: senderWalletError,
+      } = await supabase
+        .from("wallets")
+        .select("*")
+        .eq("user_id", senderId)
+        .single();
+
+      if (
+        senderWalletError ||
+        !senderWallet
+      ) {
+
+        return res.status(404).json({
+          success: false,
+          message:
+            "Sender wallet not found",
+        });
+      }
+
+      /*
+      ========================================
+      FIND RECEIVER
+      ========================================
+      */
+
+      let receiverUser;
+
+      // Phone flow
+      if (receiverPhone) {
+
+        const {
+          data,
+          error,
+        } = await supabase
+          .from("users")
+          .select("*")
+          .eq("phone", receiverPhone)
+          .single();
+
+        if (error || !data) {
+
+          return res.status(404).json({
+            success: false,
+            message:
+              "Receiver not found",
+          });
+        }
+
+        receiverUser = data;
+      }
+
+      // QR flow
+      else {
+
+        const {
+          data,
+          error,
+        } = await supabase
+          .from("users")
+          .select("*")
+          .eq("id", receiverId)
+          .single();
+
+        if (error || !data) {
+
+          return res.status(404).json({
+            success: false,
+            message:
+              "Receiver not found",
+          });
+        }
+
+        receiverUser = data;
+      }
+
+      /*
+      ========================================
+      PREVENT SELF TRANSFER
+      ========================================
+      */
+
+      if (
+        receiverUser.id === senderId
+      ) {
+
+        return res.status(400).json({
+          success: false,
+          message:
+            "Cannot send money to yourself",
+        });
+      }
+
+      /*
+      ========================================
+      FETCH RECEIVER WALLET
+      ========================================
+      */
+
+      const {
+        data: receiverWallet,
+        error: receiverWalletError,
+      } = await supabase
+        .from("wallets")
+        .select("*")
+        .eq(
+          "user_id",
+          receiverUser.id
+        )
+        .single();
+
+      if (
+        receiverWalletError ||
+        !receiverWallet
+      ) {
+
+        return res.status(404).json({
+          success: false,
+          message:
+            "Receiver wallet not found",
+        });
+      }
+
+      /*
+      ========================================
+      CHECK BALANCE
+      ========================================
+      */
+
+      if (
+        senderWallet.balance <
+        amount
+      ) {
+
+        return res.status(400).json({
+          success: false,
+          message:
+            "Insufficient balance",
+        });
+      }
+
+      /*
+      ========================================
+      DEDUCT SENDER BALANCE
+      ========================================
+      */
+
+      const {
+        error: deductError,
+      } = await supabase
+        .from("wallets")
+        .update({
+          balance:
+            senderWallet.balance -
+            amount,
+        })
+        .eq("id", senderWallet.id);
+
+      if (deductError) {
+
+        return res.status(500).json({
+          success: false,
+          message:
+            "Failed to deduct balance",
+        });
+      }
+
+      /*
+      ========================================
+      ADD RECEIVER BALANCE
+      ========================================
+      */
+
+      const {
+        error: addError,
+      } = await supabase
+        .from("wallets")
+        .update({
+          balance:
+            receiverWallet.balance +
+            amount,
+        })
+        .eq("id", receiverWallet.id);
+
+      if (addError) {
+
+        return res.status(500).json({
+          success: false,
+          message:
+            "Failed to add balance",
+        });
+      }
+
+      /*
+      ========================================
+      CREATE TRANSACTION
+      ========================================
+      */
+
+      const {
+        data: transactionData,
+        error: transactionError,
+      } = await supabase
+        .from("transactions")
+        .insert([
+          {
+            sender_wallet_id:
+              senderWallet.id,
+
+            receiver_wallet_id:
+              receiverWallet.id,
+
+            type: "TRANSFER",
+
+            amount,
+
+            status: "SUCCESS",
+
+            reference_id:
+              crypto.randomUUID(),
+
+            description:
+              "Wallet transfer",
+          },
+        ])
+        .select()
+        .single();
+
+      if (transactionError) {
+
+        return res.status(500).json({
+          success: false,
+          message:
+            "Transaction creation failed",
+        });
+      }
+
+      /*
+      ========================================
+      LEDGER ENTRIES
+      ========================================
+      */
+
+      // Sender Ledger
+      await supabase
+        .from("ledger_entries")
+        .insert([
+          {
+            transaction_id:
+              transactionData.id,
+
+            wallet_id:
+              senderWallet.id,
+
+            entry_type:
+              "DEBIT",
+
+            amount,
+          },
+        ]);
+
+      // Receiver Ledger
+      await supabase
+        .from("ledger_entries")
+        .insert([
+          {
+            transaction_id:
+              transactionData.id,
+
+            wallet_id:
+              receiverWallet.id,
+
+            entry_type:
+              "CREDIT",
+
+            amount,
+          },
+        ]);
+
+      /*
+      ========================================
+      NOTIFICATIONS
+      ========================================
+      */
+
+      await createNotification({
+
+        userId: senderId,
+
+        title: "Money Sent",
+
+        message:
+          `₹${amount} sent to ${receiverUser.full_name}`,
+
+        type: "DEBIT",
       });
-    }
-  } else {
-    const {
-      data: receiverUser,
-      error: receiverUserError,
-    } = await supabase
-      .from("users")
-      .select()
-      .eq("id", receiverId)
-      .single();
 
-    if (
-      receiverUserError ||
-      !receiverUser
-    ) {
-      return res.status(404).json({
-        success: false,
-        message: "Receiver not found",
+      await createNotification({
+
+        userId:
+          receiverUser.id,
+
+        title:
+          "Money Received",
+
+        message:
+          `₹${amount} received from ${senderUser.full_name}`,
+
+        type: "CREDIT",
       });
-    }
-  }
 
-    // Prevent self transfer
-    if (receiverUser.id === senderId) {
-      return res.status(400).json({
-        success: false,
-        message: "Cannot send money to yourself",
+      /*
+      ========================================
+      RESPONSE
+      ========================================
+      */
+
+      return res.status(200).json({
+
+        success: true,
+
+        message:
+          "Money transferred successfully",
       });
-    }
 
-    // Find receiver wallet
-    const {
-      data: receiverWallet,
-      error: receiverWalletError,
-    } = await supabase
-      .from("wallets")
-      .select()
-      .eq("user_id", receiverUser.id)
-      .single();
+    } catch (error) {
 
-    if (
-      receiverWalletError ||
-      !receiverWallet
-    ) {
-      return res.status(404).json({
-        success: false,
-        message: "Receiver wallet not found",
-      });
-    }
+      console.log(error);
 
-    // Check sender balance
-    if (senderWallet.balance < amount) {
-      return res.status(400).json({
-        success: false,
-        message: "Insufficient balance",
-      });
-    }
-
-    // Deduct sender balance
-    const {
-      error: deductError,
-    } = await supabase
-      .from("wallets")
-      .update({
-        balance:
-          senderWallet.balance - amount,
-      })
-      .eq("id", senderWallet.id);
-
-    if (deductError) {
-      return res.status(500).json({
-        success: false,
-        message: "Failed to deduct balance",
-      });
-    }
-
-    // Add receiver balance
-    const {
-      error: addError,
-    } = await supabase
-      .from("wallets")
-      .update({
-        balance:
-          receiverWallet.balance + amount,
-      })
-      .eq("id", receiverWallet.id);
-
-    if (addError) {
-      return res.status(500).json({
-        success: false,
-        message: "Failed to add balance",
-      });
-    }
-
-    // Create transaction
-    const {
-      data: transactionData,
-      error: transactionError,
-    } = await supabase
-      .from("transactions")
-      .insert([
-        {
-          sender_wallet_id: senderWallet.id,
-
-          receiver_wallet_id:
-            receiverWallet.id,
-
-          type: "TRANSFER",
-
-          amount,
-
-          status: "SUCCESS",
-
-          reference_id:
-            crypto.randomUUID(),
-
-          description:
-            "Wallet transfer",
-        },
-      ])
-      .select()
-      .single();
-
-    if (transactionError) {
       return res.status(500).json({
         success: false,
         message:
-          "Transaction creation failed",
+          "Internal server error",
       });
     }
-
-    // Sender ledger entry
-    await supabase
-      .from("ledger_entries")
-      .insert([
-        {
-          transaction_id:
-            transactionData.id,
-
-          wallet_id: senderWallet.id,
-
-          entry_type: "DEBIT",
-
-          amount,
-        },
-      ]);
-
-    // Receiver ledger entry
-    await supabase
-      .from("ledger_entries")
-      .insert([
-        {
-          transaction_id:
-            transactionData.id,
-
-          wallet_id: receiverWallet.id,
-
-          entry_type: "CREDIT",
-
-          amount,
-        },
-      ]);
-
-      const {
-  createNotification,
-} = require(
-  "../services/notification.service"
-);
-
-await createNotification({
-
-  userId: senderId,
-
-  title: "Money Sent",
-
-  message:
-    `₹${amount} sent to ${receiverUser.full_name}`,
-
-  type: "DEBIT",
-});
-
-
-await createNotification({
-
-  userId: receiverUser.id,
-
-  title: "Money Received",
-
-  message:
-    `₹${amount} received from ${senderUser.full_name}`,
-
-  type: "CREDIT",
-});
-
-    return res.status(200).json({
-      success: true,
-      message:
-        "Money transferred successfully",
-    });
-
-  } catch (error) {
-
-    console.error(error);
-
-    return res.status(500).json({
-      success: false,
-      message: "Internal server error",
-    });
   }
-});
+);
 
 router.get(
   "/history",
